@@ -8,6 +8,24 @@ selector:
   - jstests/aggregation/data/*.js
   - jstests/aggregation/sources/lookup/lookup_absorb_match.js
   - jstests/aggregation/sources/lookup/profile_lookup.js
+  # eloqdoc
+  - jstests/aggregation/bugs/server11118.js
+  - jstests/aggregation/bugs/server5932.js
+  - jstests/aggregation/bugs/server6189.js
+  - jstests/aggregation/bugs/server7695_isodates.js
+  - jstests/aggregation/expressions/convert.js
+  - jstests/aggregation/expressions/date_expressions_with_timezones.js
+  - jstests/aggregation/expressions/date_from_parts.js
+  - jstests/aggregation/expressions/date_from_string.js
+  - jstests/aggregation/expressions/date_from_string_on_error.js
+  - jstests/aggregation/expressions/date_to_parts.js
+  - jstests/aggregation/expressions/date_to_string.js
+  - jstests/aggregation/expressions/date_from_string_on_null.js
+  - jstests/aggregation/expressions/date_to_string_on_null.js
+  - jstests/aggregation/expressions/object_ids_for_date_expressions.js
+  - jstests/aggregation/illegal_reference_in_match.js
+  - jstests/aggregation/range.js
+  - jstests/aggregation/sources/lookup/collation_lookup.js
   exclude_with_any_tags:
   - assumes_superuser_permissions
   - requires_eval_command
@@ -15,8 +33,6 @@ selector:
   - uses_multiple_connections
   - uses_testing_only_commands
   - requires_sharding
-  # eloqdoc
-  - jstests/aggregation/bugs/server11118.js
   
 executor:
   config:

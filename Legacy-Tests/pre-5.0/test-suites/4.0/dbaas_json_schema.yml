@@ -18,5 +18,6 @@ executor:
     shell_options:
       readMode: commands
   hooks:
+  - class: ValidateCollections
   - class: CleanEveryN
     n: 20

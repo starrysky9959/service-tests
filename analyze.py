@@ -336,16 +336,14 @@ def summarize_results(results_coll, summary_coll, platform, version, run):
         {
             '$match': {
                 '$and': [
-                    {
-                        'platform': platform
-                    }, {
-                        'run': run
-                    }, {
-                        'version': version
-                    }
+                    {'platform': platform},
+                    {'run': run},
+                    {'version': version},
+                    {'test_file': {'$not': {'$regex': 'CleanEveryN'}}}
                 ]
             }
-        }, {
+        },
+        {
             '$facet': {
                 'suites': [
                     {
@@ -353,33 +351,15 @@ def summarize_results(results_coll, summary_coll, platform, version, run):
                             '_id': '$suite',
                             'passing_tests': {
                                 '$sum': {
-                                    '$cond': {
-                                        'if': {
-                                            '$eq': [
-                                                '$status', 'pass'
-                                            ]
-                                        },
-                                        'then': 1,
-                                        'else': 0
-                                    }
+                                    '$cond': [{'$eq': ['$status', 'pass']}, 1, 0]
                                 }
                             },
                             'failing_tests': {
                                 '$sum': {
-                                    '$cond': {
-                                        'if': {
-                                            '$eq': [
-                                                '$status', 'fail'
-                                            ]
-                                        },
-                                        'then': 1,
-                                        'else': 0
-                                    }
+                                    '$cond': [{'$eq': ['$status', 'fail']}, 1, 0]
                                 }
                             },
-                            'total_tests': {
-                                '$sum': 1
-                            }
+                            'total_tests': {'$sum': 1}
                         }
                     }
                 ],
@@ -387,85 +367,62 @@ def summarize_results(results_coll, summary_coll, platform, version, run):
                     {
                         '$group': {
                             '_id': None,
-                            'timestamp': {
-                                '$max': '$end'
-                            }
+                            'timestamp': {'$max': '$end'}
                         }
                     }
                 ]
             }
-        }, {
-            '$unwind': {
-                'path': '$timestamp'
-            }
-        }, {
-            '$addFields': {
-                'timestamp': '$timestamp.timestamp',
-                'passing_tests': {
-                    '$reduce': {
-                        'input': '$suites',
-                        'initialValue': '0',
-                        'in': {
-                            '$sum': [
-                                '$$value', '$$this.passing_tests'
-                            ]
-                        }
-                    }
-                },
-                'failing_tests': {
-                    '$reduce': {
-                        'input': '$suites',
-                        'initialValue': '0',
-                        'in': {
-                            '$sum': [
-                                '$$value', '$$this.failing_tests'
-                            ]
-                        }
-                    }
-                },
-                'total_tests': {
-                    '$reduce': {
-                        'input': '$suites',
-                        'initialValue': '0',
-                        'in': {
-                            '$sum': [
-                                '$$value', '$$this.failing_tests', '$$this.passing_tests'
-                            ]
-                        }
-                    }
-                },
-                'version': version,
-                'run': run,
-                'platform': platform
-            }
-        }, {
-            '$addFields': {
-                'failing_percentage': {
-                    '$round': [{'$divide': [
-                        {'$multiply': [100, '$failing_tests']},
-                        '$total_tests'
-                    ]}, 2]
-                },
-                'passing_percentage': {
-                    '$round': [{'$divide': [
-                        {'$multiply': [100, '$passing_tests']},
-                        '$total_tests'
-                    ]}, 2]
-                },
-            }
-        }
+        },
+        {'$unwind': {'path': '$timestamp'}},
+        {'$addFields': {
+            'timestamp': '$timestamp.timestamp',
+            'passing_tests': {
+                '$reduce': {
+                    'input': '$suites',
+                    'initialValue': 0,
+                    'in': {'$sum': ['$$value', '$$this.passing_tests']}
+                }
+            },
+            'failing_tests': {
+                '$reduce': {
+                    'input': '$suites',
+                    'initialValue': 0,
+                    'in': {'$sum': ['$$value', '$$this.failing_tests']}
+                }
+            },
+            'total_tests': {
+                '$reduce': {
+                    'input': '$suites',
+                    'initialValue': 0,
+                    'in': {'$sum': ['$$value', '$$this.failing_tests', '$$this.passing_tests']}
+                }
+            },
+            'version': version,
+            'run': run,
+            'platform': platform
+        }},
+        {'$addFields': {
+            'failing_percentage': {
+                '$round': [{'$divide': [{'$multiply': [100, '$failing_tests']}, '$total_tests']}, 2]
+            },
+            'passing_percentage': {
+                '$round': [{'$divide': [{'$multiply': [100, '$passing_tests']}, '$total_tests']}, 2]
+            },
+        }}
     ])
+    
     # Prepare Markdown file with suite-level breakdown
     md_path = 'summary.md'
     table_headers = ['Tests Suite', 'Number of tests', 'Succeeded', 'Skipped', 'Failed', 'Errored']
-    # Aggregate per-suite stats
+    
+    # Aggregate per-suite stats (excluding CleanEveryN tests)
     suite_stats = {}
-    skipped_suites = set()
     for suite_doc in results_coll.aggregate([
         {'$match': {
             'platform': platform,
             'run': run,
-            'version': version
+            'version': version,
+            'test_file': {'$not': {'$regex': 'CleanEveryN'}}
         }},
         {'$group': {
             '_id': {'suite': '$suite', 'status': '$status'},
@@ -497,7 +454,7 @@ def summarize_results(results_coll, summary_coll, platform, version, run):
     # Write Markdown table
     with open(md_path, 'w', encoding='utf-8') as md:
         md.write('| ' + ' | '.join(table_headers) + ' |\n')
-        md.write('|' + '|'.join(['---'] * len(table_headers)) + '|\n')
+        md.write('|' + '|'.join([' --- ' if i == 0 else ' :---: ' for i in range(len(table_headers))]) + '|\n')
         for suite in sorted(suite_stats.keys()):
             s = suite_stats[suite]
             md.write(f'| {suite} | {s["Number of tests"]} | {s["Succeeded"]} | {s["Skipped"]} | {s["Failed"]} | {s["Errored"]} |\n')
@@ -506,9 +463,11 @@ def summarize_results(results_coll, summary_coll, platform, version, run):
         def pct(val):
             return f"{(val/total_tests*100):.2f}%" if total_tests else '0%'
         md.write(f'| PERCENTAGES | - | {pct(total_succeeded)} | {pct(total_skipped)} | {pct(total_failed)} | {pct(total_errored)} |\n')
-    # Still print and insert summary doc as before
+    
+    logger.info(f'Summary markdown file created: {md_path}')
+    
+    # Still insert summary doc into database
     for doc in summary:
-        print(doc)
         summary_coll.insert_one(doc)
 
 
@@ -525,7 +484,7 @@ def build_csv(coll, csv_f, csv_filter):
         csv_filter = {}
     with open(csv_f, 'w+') as out:
         out.write('test file,suite,platform,version,run no,status,reason,description\n')
-        for doc in coll.find(csv_filter):
+        for doc in coll.find({**csv_filter, 'test_file': {'$not': {'$regex': 'CleanEveryN'}}}):
             tn = doc['test_file']
             s = doc['suite']
             p = doc['platform']
