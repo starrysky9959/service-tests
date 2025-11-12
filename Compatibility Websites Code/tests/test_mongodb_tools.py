@@ -96,8 +96,8 @@ class TestMongoDBTools(BaseTest):
                     '--collection', self.collection_name,
                     '--db', config.DOCDB_DB_NAME,
                     '--out', self.dump_directory,
-                    '--ssl',
-                    '--sslCAFile', config.DOCDB_SSL_CA_FILE
+                    # '--ssl',
+                    # '--sslCAFile', config.DOCDB_SSL_CA_FILE
                 ]
                 self.logger.debug(f"Executing mongodump command: {' '.join(dump_cmd)}")
                 dump_result = subprocess.run(dump_cmd, capture_output=True, text=True)

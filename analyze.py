@@ -455,7 +455,60 @@ def summarize_results(results_coll, summary_coll, platform, version, run):
             }
         }
     ])
+    # Prepare Markdown file with suite-level breakdown
+    md_path = 'summary.md'
+    table_headers = ['Tests Suite', 'Number of tests', 'Succeeded', 'Skipped', 'Failed', 'Errored']
+    # Aggregate per-suite stats
+    suite_stats = {}
+    skipped_suites = set()
+    for suite_doc in results_coll.aggregate([
+        {'$match': {
+            'platform': platform,
+            'run': run,
+            'version': version
+        }},
+        {'$group': {
+            '_id': {'suite': '$suite', 'status': '$status'},
+            'count': {'$sum': 1}
+        }}
+    ]):
+        suite = suite_doc['_id']['suite']
+        status = suite_doc['_id']['status']
+        count = suite_doc['count']
+        if suite not in suite_stats:
+            suite_stats[suite] = {'Succeeded': 0, 'Skipped': 0, 'Failed': 0, 'Errored': 0, 'Number of tests': 0}
+        if status == 'pass':
+            suite_stats[suite]['Succeeded'] += count
+        elif status == 'fail':
+            suite_stats[suite]['Failed'] += count
+        elif status == 'skip':
+            suite_stats[suite]['Skipped'] += count
+        elif status == 'error':
+            suite_stats[suite]['Errored'] += count
+        suite_stats[suite]['Number of tests'] += count
+
+    # Calculate totals
+    total_tests = sum(s['Number of tests'] for s in suite_stats.values())
+    total_succeeded = sum(s['Succeeded'] for s in suite_stats.values())
+    total_skipped = sum(s['Skipped'] for s in suite_stats.values())
+    total_failed = sum(s['Failed'] for s in suite_stats.values())
+    total_errored = sum(s['Errored'] for s in suite_stats.values())
+
+    # Write Markdown table
+    with open(md_path, 'w', encoding='utf-8') as md:
+        md.write('| ' + ' | '.join(table_headers) + ' |\n')
+        md.write('|' + '|'.join(['---'] * len(table_headers)) + '|\n')
+        for suite in sorted(suite_stats.keys()):
+            s = suite_stats[suite]
+            md.write(f'| {suite} | {s["Number of tests"]} | {s["Succeeded"]} | {s["Skipped"]} | {s["Failed"]} | {s["Errored"]} |\n')
+        md.write(f'| TOTAL | {total_tests} | {total_succeeded} | {total_skipped} | {total_failed} | {total_errored} |\n')
+        # Percentages row
+        def pct(val):
+            return f"{(val/total_tests*100):.2f}%" if total_tests else '0%'
+        md.write(f'| PERCENTAGES | - | {pct(total_succeeded)} | {pct(total_skipped)} | {pct(total_failed)} | {pct(total_errored)} |\n')
+    # Still print and insert summary doc as before
     for doc in summary:
+        print(doc)
         summary_coll.insert_one(doc)
 
 
